@@ -303,7 +303,7 @@ if __name__ == "__main__":
     """
     
     # Choose the mode of operation
-    MODE = "train_continue"  # Options: "train_fresh", "train_continue", "test_only"
+    MODE = "test_only"  # Options: "train_fresh", "train_continue", "test_only"
     MODEL_PATH = "models/dqn_lunar_lander"
     
     if MODE == "test_only":
