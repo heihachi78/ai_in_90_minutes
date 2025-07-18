@@ -207,7 +207,7 @@ def train_eval(model : BaseModel) -> None:
 
 if __name__ == '__main__':
 
-    LEARNING = True
+    LEARNING = False
     DISABLE_GPU = False
     ASYNC = True
     PROCESSES = 10
