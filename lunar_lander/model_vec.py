@@ -55,7 +55,7 @@ class ModelActorCritic(BaseModel):
 
     def _create_model(self) -> Model:
         model = Sequential([
-            Input(shape=(self.n_input)),
+            Input(shape=(self.n_input,)),
             Dense(self.n_neurons[0], activation='relu'),
             Dense(self.n_neurons[1], activation='relu'),
             Dense(self.n_output, activation='linear', name='custom_model')
