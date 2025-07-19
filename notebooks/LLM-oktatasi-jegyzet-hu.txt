@@ -1,0 +1,494 @@
+
+NAGY NYELVI MODELLEK: AZ ALAPOKTÓL A RAG-IG
+Oktatási jegyzet informatikai szakemberek számára
+
+Tartalomjegyzék
+1. Bevezetés: Mi az a nagy nyelvi modell (LLM)?
+2. Első lépések: LLM használata Azure OpenAI-vel
+3. Tokenek: A szöveg feldarabolása
+4. A következő token megjóslásának varázsa
+5. Prompt engineering: Hatékony utasítások
+6. Kontextusablak: A modell „memóriája”
+7. Paraméterek, amelyek befolyásolják a működést
+8. Modellváltozatok összehasonlítása
+9. Funkcióhívás: Interaktív LLM-ek
+10. Beágyazások: Szemantikus hasonlóság mérése
+11. Bevezetés a RAG-hez (Retrieval-Augmented Generation)
+12. Haladó RAG koncepciók
+13. Való életbeli alkalmazások és legjobb gyakorlatok
+14. Hibakeresés és problémamegoldás
+15. Jövőbeli irányok és fejlett témák
+16. Gyakorló feladatok
+17. További források
+18. Fogalomtár
+
+Előfeltételek:
+- Alapszintű Python ismeret (változók, függvények, pip)
+- API-k alapvető ismerete
+- Azure OpenAI (vagy OpenAI) API-kulcs hozzáférés
+
+-------------------------------------------------
+1. Bevezetés: Mi az a nagy nyelvi modell?
+-------------------------------------------------
+Cél: 
+- Az LLM definíciója, szerepe, története
+- Miért fontosak a modern informatikában
+
+Fő fogalmak:
+- LLM (Large Language Model): nagyméretű, szövegen tanított mély neurális hálózat
+- Fejlődés: szabályalapú rendszerek → statisztikai NLP → neurális hálók → transformer architektúra
+- Jelentőség: automatizált szövegalkotás, kérdés-válasz, kódgenerálás, chatbotok
+
+Egyszerű analógia:
+Az LLM-ek olyanok, mint egy „nagyon okos kiegészítő/autocomplete”: amikor beírunk egy mondatkezdetet, a modell megpróbálja kitalálni a folytatást, óriási mennyiségű előzetes tudás alapján.
+
+Példa kód:
+text = "Az idő ma nagyon"
+print(f"Bemenet: {text}")
+print("Ember tippje: napos, esős, hideg...")
+print("LLM: Több ezer lehetőséget mérlegel, mindegyikhez valószínűséget rendel.")
+
+Lényeg:
+- Az LLM valószínűségi alapon dönti el, mi következzen.
+- Minél nagyobb a modell, annál szélesebb körű a „világtudása”.
+
+-------------------------------------------------
+2. Első lépések: LLM használata Azure OpenAI-jal
+-------------------------------------------------
+Cél:
+- Azure OpenAI API használatának bemutatása
+
+Gyakorlati példa:
+A céged automatizált ügyfélszolgálati rendszert szeretne építeni Azure OpenAI segítségével.
+
+Beállítás:
+- Regisztráció Azure OpenAI-hoz
+- API-kulcs és végpont megszerzése
+
+Környezeti ellenőrzés:
+# !pip install openai tiktoken
+import openai
+import os
+assert os.getenv("AZURE_OPENAI_API_KEY"), "Az Azure OpenAI API-kulcs nincs beállítva!"
+assert os.getenv("AZURE_OPENAI_ENDPOINT"), "Az Azure végpont nincs beállítva!"
+
+Alap példa:
+from openai import AzureOpenAI
+client = AzureOpenAI(
+    api_key=os.getenv("AZURE_OPENAI_API_KEY"),
+    api_version="2024-02-01",
+    azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT")
+)
+try:
+    response = client.chat.completions.create(
+        model="gpt-4",
+        messages=[{"role": "user", "content": "Magyarázd el a rekurziót programozásban"}]
+    )
+    print(response.choices[0].message.content)
+except Exception as e:
+    print(f"API hiba: {e}")
+
+Fő tanulságok:
+- Kérés/válasz mintázat
+- A „messages” mezőben van a teljes beszélgetés
+- Modell, temperature, stb. paraméterek
+
+-------------------------------------------------
+3. Tokenek: A szöveg feldarabolása
+-------------------------------------------------
+Cél:
+- A token fogalma és jelentősége
+
+Mit jelent a token?
+- A szöveget „tokenekre” (rész-szavakra) bontják
+- A modell ezek számértékével dolgozik
+- A tokenizálás befolyásolja a költséget és a feldolgozható szöveg hosszát
+
+Interaktív példa:
+import tiktoken
+szoveg = "Helló, világ! Hogy vagy ma? 😊"
+encoding = tiktoken.encoding_for_model("gpt-4")
+tokenek = encoding.encode(szoveg)
+print(f"Eredeti szöveg: {szoveg}")
+print(f"Tokenek száma: {len(tokenek)}")
+print(f"Tokenek: {tokenek}")
+for i, token in enumerate(tokenek):
+    print(f"Token {i}: {token} -> '{encoding.decode([token])}'")
+
+Gyakorlati következmények:
+- Tokenek alapján történik a számlázás
+- Minden modellnek van maximális token-határa
+- Egyes szavak több tokenből állhatnak
+
+Hasznos eszköz:
+- OpenAI Tokenizer: https://platform.openai.com/tokenizer
+
+-------------------------------------------------
+4. A következő token megjóslásának varázsa
+-------------------------------------------------
+Cél:
+- Megérteni a tokenenkénti előrejelzés lényegét
+
+Fő elv:
+Az LLM minden egyes tokennél valószínűségi eloszlásból választ.
+
+Példa vizualizáció:
+import matplotlib.pyplot as plt
+kov_token_probak = {"Párizs": 0.85, "Lyon": 0.05, "található": 0.03, "nevezik": 0.02, "ismeretlen": 0.01, "egyéb": 0.04}
+plt.bar(kov_token_probak.keys(), kov_token_probak.values())
+plt.title("Valószínűségek a következő tokenre: 'Franciaország fővárosa ...'")
+plt.ylabel("Valószínűség")
+plt.show()
+
+Temperature példa:
+def teszt_temperature(client):
+    prompt = "Írj egy kreatív történetet egy robotról!"
+    for temp in [0.1, 0.7, 1.2]:
+        print(f"--- Hőmérséklet {temp} ---")
+        try:
+            response = client.chat.completions.create(
+                model="gpt-4",
+                messages=[{"role": "user", "content": prompt}],
+                temperature=temp,
+                max_tokens=100
+            )
+            print(response.choices[0].message.content)
+        except Exception as e:
+            print(f"API hiba: {e}")
+# teszt_temperature(client)
+
+- Alacsony temperature: kiszámítható, ismétlődő kimenet
+- Magas temperature: kreatívabb, de néha értelmetlen
+
+-------------------------------------------------
+5. Prompt engineering: Hatékony utasítások
+-------------------------------------------------
+Cél:
+- Jó promptokat írni, elkerülni a tipikus hibákat
+
+Miért fontos?
+- A modell pontosan a promptot követi
+- Pontatlan prompt = irreleváns vagy hibás eredmény
+
+Példa (rossz/jó/legjobb):
+promtok = [
+    "Írj kódot",  # Rossz
+    "Írj egy Python függvényt, amely kiszámolja egy szám faktoriálisát",  # Jobb
+    "Írj egy Python függvényt, amely:
+ 1. Pozitív egész szám faktoriálisát számolja
+ 2. Hibakezelést tartalmaz
+ 3. Dokumentált példákkal
+ 4. Rekurzív"  # Legjobb
+]
+for i, prompt in enumerate(promtok):
+    print(f"
+--- Prompt {i+1} ---")
+    print(prompt)
+    # Itt lehet hívni az LLM-et és kiírni az eredményt
+
+Haladó technikák:
+- Few-shot (példák a promptban)
+- Chain of thought („Gondolkodj lépésről lépésre”)
+- Szerepalapú prompt: „Python tanár vagy, magyarázd el ...”
+
+Biztonság:
+- Vigyázat a prompt injection-nel (rosszindulatú bemenetek!)
+
+-------------------------------------------------
+6. Kontextusablak: A modell „memóriája”
+-------------------------------------------------
+Cél:
+- Megérteni a kontextus fogalmát és a token limitet
+
+Mit jelent a kontextus?
+- A modell csak a legutóbbi X tokent látja
+- Ha a beszélgetés túl hosszú, a legrégebbi részek „lemaradnak”
+
+Kód példa:
+beszelgetes = []
+promtok = [
+    "A nevem Anna, és Pythont tanulok.",
+    "Milyen programnyelvet tanulok?",
+    "Mi a nevem?",
+    "Írj nekem egy Python hello world-öt!"
+]
+for prompt in promtok:
+    beszelgetes.append({"role": "user", "content": prompt})
+    response = client.chat.completions.create(
+        model="gpt-4",
+        messages=beszelgetes
+    )
+    assistant_msg = response.choices[0].message.content
+    beszelgetes.append({"role": "assistant", "content": assistant_msg})
+    print(f"
+User: {prompt}")
+    print(f"Assistant: {assistant_msg}")
+    print(f"Jelenlegi beszélgetés hossza: {len(beszelgetes)} üzenet")
+
+Lényeg:
+- Figyeljünk a tokenhasználatra!
+- Hosszabb beszélgetés esetén érdemes összefoglalni/rövidíteni a régebbi részeket.
+
+-------------------------------------------------
+7. Paraméterek, amelyek befolyásolják a működést
+-------------------------------------------------
+Cél:
+- A paraméterek kísérletezése, hatásuk bemutatása
+
+Fő paraméterek:
+temperature - Véletlenszerűség (0=determinált, 1=„színesebb”)
+top_p       - Nukleusz minta, diverzitás
+max_tokens  - Maximális válasz hossza
+frequency_penalty - Ismétlések elkerülése
+presence_penalty  - Új témák bátorítása
+
+Kísérlet:
+def teszt_parameterek(client):
+    alap_prompt = "Magyarázd el a gépi tanulást egyszerűen!"
+    konfiguraciok = [
+        {"temperature": 0, "max_tokens": 50, "name": "Determinált & rövid"},
+        {"temperature": 1.0, "max_tokens": 200, "name": "Kreatív & hosszú"},
+        {"temperature": 0.5, "top_p": 0.9, "name": "Kiegyensúlyozott"}
+    ]
+    for config in konfiguraciok:
+        print(f"
+--- {config['name']} ---")
+        try:
+            response = client.chat.completions.create(
+                model="gpt-4",
+                messages=[{"role": "user", "content": alap_prompt}],
+                **{k: v for k, v in config.items() if k != 'name'}
+            )
+            print(response.choices[0].message.content)
+        except Exception as e:
+            print(f"API hiba: {e}")
+# teszt_parameterek(client)
+
+-------------------------------------------------
+8. Modellváltozatok összehasonlítása
+-------------------------------------------------
+Cél:
+- Megfelelő modell kiválasztása
+
+Összehasonlító táblázat:
+Modell          | Tudás/színvonal | Költség | Sebesség | Kontextus méret
+gpt-3.5-turbo   | Jó/olcsó/gyors  | Alacsony| Gyors    | 16-32k token
+gpt-4           | Legjobb/legdrágább| Magas  | Lassú    | 8k-128k token
+
+Példa:
+modelek = ["gpt-35-turbo", "gpt-4"]
+feladat = "Elemezd ezt a kódot hibák szempontjából: for i in range(10): print(i)"
+for modell in modelek:
+    print(f"
+--- {modell} elemzés ---")
+    # API hívás és eredmény
+
+-------------------------------------------------
+9. Funkcióhívás: Interaktív LLM-ek
+-------------------------------------------------
+Cél:
+- Hogyan tud az LLM külső funkciókat meghívni?
+
+Elv:
+- Az LLM strukturált választ ad (pl. JSON), így akár külső API-t is meghívhatunk.
+
+Példa:
+import json
+def idojaras(varos):
+    adat = {
+        "Budapest": "Napos, 25°C",
+        "London": "Esős, 18°C",
+        "New York": "Felhős, 22°C"
+    }
+    return adat.get(varos, "Nincs adat")
+funkciok = [{
+    "name": "idojaras",
+    "description": "Időjárás lekérdezése város alapján",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "varos": {"type": "string", "description": "Város neve"}
+        },
+        "required": ["varos"]
+    }
+}]
+response = client.chat.completions.create(
+    model="gpt-4",
+    messages=[{"role": "user", "content": "Milyen az idő Budapesten?"}],
+    functions=funkciok,
+    function_call="auto"
+)
+if response.choices[0].message.function_call:
+    nev = response.choices[0].message.function_call.name
+    args = json.loads(response.choices[0].message.function_call.arguments)
+    if nev == "idojaras":
+        print(f"Eredmény: {idojaras(args['varos'])}")
+
+-------------------------------------------------
+10. Beágyazások: Szemantikus hasonlóság
+-------------------------------------------------
+Cél:
+- Szemantikus keresés, szövegek összehasonlítása
+
+Mi az embedding?
+- Szöveget számvektorokká alakítjuk, így hasonlóság mérhető
+
+Példa:
+import numpy as np
+from sklearn.metrics.pairwise import cosine_similarity
+def get_embedding(text):
+    response = client.embeddings.create(
+        model="text-embedding-ada-002",
+        input=text
+    )
+    return response.data[0].embedding
+szovegek = [
+    "A macska ül a szőnyegen.",
+    "Egy cica pihen a padlón.",
+    "Szeretek Pythont programozni.",
+    "A Python a kedvenc nyelvem."
+]
+emb = [get_embedding(t) for t in szovegek]
+sim = cosine_similarity(emb)
+for i, a in enumerate(szovegek):
+    for j, b in enumerate(szovegek):
+        if i < j:
+            print(f"'{a}' vs '{b}': {sim[i][j]:.3f}")
+
+-------------------------------------------------
+11. Bevezetés a RAG-hez (Retrieval-Augmented Generation)
+-------------------------------------------------
+Cél:
+- A RAG (lekérdezés-alapú generálás) működésének bemutatása
+
+Miért kell RAG?
+- Az LLM-ek tudása korlátos (adott időpontig tanították őket)
+- RAG: friss vagy céges adatok becsatolása a generáláshoz
+
+RAG elv:
+1. Lekérdezés (releváns dokumentumok keresése)
+2. Kontextus bővítése (a legjobb találatok beillesztése a promptba)
+3. Válaszgenerálás
+
+Egyszerű példa:
+dokumentumok = [
+    "Azure OpenAI Service REST API elérést ad a nyelvi modellekhez.",
+    "Embedding: szövegek numerikus vektorokká alakítása.",
+    "A RAG ötvözi a keresést és a generálást.",
+    "A funkcióhívás lehetővé teszi API-k használatát."
+]
+def simple_rag(query, docs, top_k=2):
+    query_emb = get_embedding(query)
+    sim_list = []
+    for doc in docs:
+        doc_emb = get_embedding(doc)
+        similarity = cosine_similarity([query_emb], [doc_emb])[0][0]
+        sim_list.append((doc, similarity))
+    sim_list.sort(key=lambda x: x[1], reverse=True)
+    relevans = [doc for doc, _ in sim_list[:top_k]]
+    context = "\n".join(relevans)
+    prompt = f"""Az alábbi információk alapján:\n{context}\nKérdés: {query}\nVálasz:"""
+    response = client.chat.completions.create(
+        model="gpt-4",
+        messages=[{"role": "user", "content": prompt}]
+    )
+    return response.choices[0].message.content, relevans
+
+kerdes = "Mi az Azure OpenAI Service?"
+valasz, forrasok = simple_rag(kerdes, dokumentumok)
+print(f"Kérdés: {kerdes}\nForrások: {forrasok}\nVálasz: {valasz}")
+
+-------------------------------------------------
+12. Haladó RAG koncepciók
+-------------------------------------------------
+Cél:
+- Dokumentum darabolás (chunking), vektor-adatbázis, metaadat szűrés
+
+Chunking:
+- Hosszú dokumentumokat kis átfedő szakaszokra kell bontani
+
+Vektor-adatbázis:
+- Embeddingek hatékony tárolása, gyors keresés (pl. Azure Cognitive Search, Pinecone, Weaviate)
+
+Haladó példa:
+class HaladoRAG:
+    def __init__(self):
+        self.docs = [
+            {"text": "Azure árak...", "kategoria": "ar", "datum": "2024-01-15"},
+            {"text": "Azure technikai dokumentáció...", "kategoria": "technikai", "datum": "2024-02-01"},
+        ]
+    def lekerdezes_szurovel(self, query, kat=None):
+        if kat:
+            szurt = [d for d in self.docs if d["kategoria"] == kat]
+        else:
+            szurt = self.docs
+        return szurt
+
+rag = HaladoRAG()
+print(rag.lekerdezes_szurovel("Mi az Azure ára?", kat="ar"))
+
+-------------------------------------------------
+13. Való életbeli alkalmazások és legjobb gyakorlatok
+-------------------------------------------------
+Leggyakoribb felhasználás:
+- Dokumentum alapú kérdés-válasz rendszerek
+- Kódasszisztensek, fejlesztői chatbotok
+- Ügyfélszolgálati botok
+- Tartalomgenerálás
+
+Legjobb gyakorlatok:
+- Hibakezelés, API limit figyelés, cache-elés, naplózás, biztonság (API-kulcsok védelme)
+- Etikus használat, adatok védelme, torzítások elkerülése
+
+-------------------------------------------------
+14. Hibakeresés és problémamegoldás
+-------------------------------------------------
+Gyakori hibák:
+- Token limit túllépés -> Kontextus rövidítése
+- Gyenge keresés -> chunking, embedding javítása
+- Lassú válasz -> kisebb kontextus, cache használat
+- Irreleváns válasz -> prompt javítása, szűrés
+
+Hibakereső kód:
+def debug_rag_valasz(kerdes, talalatok, valasz):
+    print("=== RAG debug ===")
+    print(f"Kérdés: {kerdes}")
+    print(f"Dokumentumok: {len(talalatok)} db")
+    for i, d in enumerate(talalatok):
+        print(f"Doc {i+1}: {d[:100]}...")
+    print(f"Válasz hossza: {len(valasz)} karakter")
+    print("=================")
+
+-------------------------------------------------
+15. Jövőbeli irányok és fejlett témák
+-------------------------------------------------
+- Multimodális LLM-ek (szöveg+képek)
+- Ügynökök, automatizált eszközhasználat
+- Finomhangolás céges/adott szakterületi adatokon
+
+-------------------------------------------------
+16. Gyakorló feladatok
+-------------------------------------------------
+1. Saját chatbot fejlesztése (FAQ alapján)
+2. Dokumentum alapú Q&A rendszer (RAG)
+3. Kódellenőrző asszisztens (kódminőség)
+4. RAG teljesítmény optimalizálás (sebesség, pontosság)
+
+-------------------------------------------------
+17. További források
+-------------------------------------------------
+- Azure OpenAI dokumentáció: https://learn.microsoft.com/hu-hu/azure/cognitive-services/openai/
+- OpenAI Cookbook: https://cookbook.openai.com/
+- LangChain keretrendszer: https://python.langchain.com/
+- Vektor-adatbázisok: https://www.pinecone.io/, https://weaviate.io/
+- Üzembehelyezési útmutatók: https://learn.microsoft.com/hu-hu/azure/architecture/example-scenario/ai/openai-embeddings
+
+-------------------------------------------------
+18. Fogalomtár
+-------------------------------------------------
+- Token: Szöveg legkisebb egysége, amit az LLM értelmez
+- Beágyazás (embedding): Szöveg numerikus vektor reprezentációja
+- RAG: Retrieval-Augmented Generation (lekérdezés-alapú generálás)
+- Kontextusablak: Maximálisan feldolgozható szöveghossz (tokenben)
+- Temperature: Véletlenszerűség a kimenetben
+- Prompt engineering: Hatékony utasítás írása az LLM számára
