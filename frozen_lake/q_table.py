@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import time
 
 class FrozenLakeQLearning:
-    def __init__(self, environment_name="FrozenLake-v1", is_slippery=False):
+    def __init__(self, environment_name="FrozenLake-v1", is_slippery=False, render=False):
         """
         FrozenLake Q-Learning ágens inicializálása
         
@@ -12,10 +12,13 @@ class FrozenLakeQLearning:
             environment_name: A környezet neve
             is_slippery: Ha True, akkor a jég csúszós (sztochasztikus környezet)
         """
+        self.is_slippery = is_slippery
         # Környezet létrehozása
-        #self.env = gym.make(environment_name, is_slippery=is_slippery, render_mode="grayscale")
-        self.env = gym.make(environment_name, is_slippery=is_slippery, render_mode="human")
-        
+        if render:
+            self.env = gym.make(environment_name, is_slippery=self.is_slippery, render_mode="human")
+        else:
+            self.env = gym.make(environment_name, is_slippery=self.is_slippery, render_mode="grayscale")
+
         # Állapot- és akciótér mérete
         self.state_size = self.env.observation_space.n  # 16 (4x4 rács)
         self.action_size = self.env.action_space.n      # 4 (fel, le, balra, jobbra)
@@ -23,12 +26,12 @@ class FrozenLakeQLearning:
         # Q-tábla inicializálása nullákkal
         self.q_table = np.zeros((self.state_size, self.action_size))
         
-        # Hiperparaméterek
-        self.learning_rate = 0.8    # Alpha - tanulási ráta
-        self.discount_factor = 0.95 # Gamma - leszámítolási tényező
+        # Hiperparaméterek - optimalizált a konzisztens tanulásért
+        self.learning_rate = 0.1    # Alpha - alacsonyabb tanulási ráta
+        self.discount_factor = 0.99 # Gamma - magasabb leszámítolási tényező
         self.epsilon = 1.0          # Exploráció valószínűsége
-        self.epsilon_min = 0.01     # Minimum exploráció
-        self.epsilon_decay = 0.995  # Exploráció csökkenése
+        self.epsilon_min = 0.1      # Magasabb minimum exploráció
+        self.epsilon_decay = 0.9995 # Lassabb exploráció csökkenés
         
         # Statisztikák követése
         self.rewards_per_episode = []
@@ -84,6 +87,7 @@ class FrozenLakeQLearning:
         """
         print(f"Tanítás kezdése {episodes} epizóddal...")
         print(f"Környezet: {self.state_size} állapot, {self.action_size} akció")
+        print(f"Hiperparaméterek: lr={self.learning_rate}, γ={self.discount_factor}, ε_min={self.epsilon_min}")
         print("-" * 50)
         
         for episode in range(episodes):
@@ -92,8 +96,9 @@ class FrozenLakeQLearning:
             total_reward = 0
             steps = 0
             done = False
+            max_steps = 100  # Végtelen ciklusok elkerülése
             
-            while not done:
+            while not done and steps < max_steps:
                 # Akció választása
                 action = self.choose_action(state)
                 
@@ -117,16 +122,22 @@ class FrozenLakeQLearning:
             self.epsilon_history.append(self.epsilon)
             
             # Haladás kiírása
-            if (episode + 1) % 100 == 0:
-                avg_reward = np.mean(self.rewards_per_episode[-100:])
+            if (episode + 1) % 200 == 0:
+                avg_reward = np.mean(self.rewards_per_episode[-200:])
+                success_rate = np.sum([r > 0 for r in self.rewards_per_episode[-200:]]) / 200 * 100
                 print(f"Epizód {episode + 1:4d} | "
-                      f"Átlag jutalom (utolsó 100): {avg_reward:.3f} | "
+                      f"Átlag jutalom: {avg_reward:.3f} | "
+                      f"Sikerességi arány: {success_rate:.1f}% | "
                       f"Epsilon: {self.epsilon:.3f}")
         
         self.env.close()
         print("\nTanítás befejezve!")
+        
+        # Végső statisztikák
+        final_success_rate = np.sum([r > 0 for r in self.rewards_per_episode[-100:]]) / 100 * 100
+        print(f"Végső sikerességi arány (utolsó 100 epizód): {final_success_rate:.1f}%")
     
-    def test(self, episodes=10, render=True):
+    def test(self, episodes=10, render=True, slowdown=0.25):
         """
         Tanított ágens tesztelése
         
@@ -135,9 +146,9 @@ class FrozenLakeQLearning:
             render: Vizualizáció megjelenítése
         """
         if render:
-            test_env = gym.make("FrozenLake-v1", is_slippery=False, render_mode="human")
+            test_env = gym.make("FrozenLake-v1", is_slippery=self.is_slippery, render_mode="human")
         else:
-            test_env = gym.make("FrozenLake-v1", is_slippery=False)
+            test_env = gym.make("FrozenLake-v1", is_slippery=self.is_slippery)
         
         print(f"\nTesztelés {episodes} epizóddal (exploráció kikapcsolva)...")
         successes = 0
@@ -162,7 +173,7 @@ class FrozenLakeQLearning:
                 steps += 1
                 
                 if render:
-                    time.sleep(0.5)  # Lassabb megjelenítés
+                    time.sleep(slowdown)  # Lassabb megjelenítés
             
             total_rewards.append(total_reward)
             if total_reward > 0:
@@ -190,11 +201,11 @@ class FrozenLakeQLearning:
         episodes = range(len(self.rewards_per_episode))
         ax1.plot(episodes, self.rewards_per_episode, alpha=0.6, color='blue')
         
-        # Simított görbe (100 epizódos átlag)
-        if len(self.rewards_per_episode) >= 100:
-            smoothed = [np.mean(self.rewards_per_episode[max(0, i-99):i+1]) 
+        # Simított görbe (50 epizódos átlag)
+        if len(self.rewards_per_episode) >= 50:
+            smoothed = [np.mean(self.rewards_per_episode[max(0, i-49):i+1]) 
                        for i in range(len(self.rewards_per_episode))]
-            ax1.plot(episodes, smoothed, color='red', linewidth=2, label='100-epizód átlag')
+            ax1.plot(episodes, smoothed, color='red', linewidth=2, label='50-epizód átlag')
             ax1.legend()
         
         ax1.set_title('Jutalmak alakulása')
@@ -245,22 +256,53 @@ class FrozenLakeQLearning:
 
 # Használat példa
 if __name__ == "__main__":
-    # Ágens létrehozása
-    agent = FrozenLakeQLearning(is_slippery=False)  # Determinisztikus verzió
-    
     print("🎮 FrozenLake Q-Learning megoldó")
     print("=" * 50)
     print("Cél: Eljutni az S-től a G-ig a lyukak (H) elkerülésével")
     print("Akciók: 0=Bal, 1=Le, 2=Jobb, 3=Fel")
     print()
     
-    # Tanítás
-    agent.train(episodes=1000)
+    # Konzisztencia teszt - több futtatás összehasonlítása
+    print("🔬 KONZISZTENCIA TESZT:")
+    print("Több független tanítás összehasonlítása...")
+    print("-" * 50)
     
-    # Eredmények megjelenítése
-    agent.plot_training_progress()
-    agent.print_policy()
-    agent.print_q_table()
+    success_rates = []
     
-    # Tesztelés
-    agent.test(episodes=5, render=True)
+    for run in range(3):
+        print(f"\n--- {run + 1}. futtatás ---")
+        
+        # Ágens létrehozása minden futtatáshoz új
+        agent = FrozenLakeQLearning(is_slippery=False, render=False)
+        
+        # Tanítás
+        agent.train(episodes=6000)  # Több epizód a jobb tanuláshoz
+        
+        # Tesztelés
+        success_rate, avg_reward = agent.test(episodes=20, render=True, slowdown=0.0)
+        success_rates.append(success_rate)
+        
+        print(f"Sikerességi arány: {success_rate:.1f}%")
+        
+        # Csak az első futtatásnál jelenítjük meg a részletes eredményeket
+        if run == 0:
+            agent.plot_training_progress()  # Grafikon megjelenítése
+            agent.print_policy()
+            agent.print_q_table()
+    
+    # Összesített eredmények
+    print(f"\n📊 KONZISZTENCIA EREDMÉNYEK:")
+    print(f"Sikerességi arányok: {[f'{rate:.1f}%' for rate in success_rates]}")
+    print(f"Átlagos sikerességi arány: {np.mean(success_rates):.1f}%")
+    print(f"Szórás: {np.std(success_rates):.1f}%")
+    print(f"Min-Max: {np.min(success_rates):.1f}% - {np.max(success_rates):.1f}%")
+    
+    if np.std(success_rates) < 15:
+        print("\n✅ KONZISZTENS tanulás - az optimalizált hiperparaméterek működnek!")
+    else:
+        print("\n⚠️  VÁLTOZÓ eredmények - a sparse reward még mindig problémát okoz.")
+        
+    print(f"\n💡 MAGYARÁZAT:")
+    print(f"A módosított hiperparaméterek (lr={agent.learning_rate}, ε_min={agent.epsilon_min}, ε_decay={agent.epsilon_decay})")
+    print(f"segítenek a konzisztensebb tanulásban, de a FrozenLake sparse reward struktura")
+    print(f"miatt még mindig lehet némi variancia az eredményekben.")
