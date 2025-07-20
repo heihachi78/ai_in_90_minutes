@@ -8,9 +8,9 @@ Az előadáshoz használt notebookok a notebooks könyvtárban találhatóak.
 
 Ha valaki szeretné kipróbálni és sajátkezűleg futtatni a kódokat, arra a következő képpen van lehetőség:
 
-
-
-
-Works with Python 3.9.6 on MacOS, thats for sure. For everything else... good luck!
+- Python 3.9-el lett tesztelve, de valószínűleg a 3.11, és 3.12 is megfelel. 3.13-al ugyan lefut, de végtelen számú warningot generál...
+- virtuális környezet létrehozása: python3 -m venv .venv
+- függőségek telepítése: pip install -r requirements.txt
+- elképzelhető, hogy swig-et kell installálni: Mac-en brew install swig
 
 A tévedés jogát fenntartom.
